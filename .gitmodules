@@ -1,0 +1,3 @@
+[submodule "ref/Quantifying_clusterness_trajectoriness"]
+	path = ref/Quantifying_clusterness_trajectoriness
+	url = https://github.com/pqiu/Quantifying_clusterness_trajectoriness.git
