@@ -172,3 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# ignore all data files from src/data/ except for the README
+src/data/*
+!src/data/README.md
