@@ -1,23 +1,9 @@
-# Import necessary libraries
-import sys
-import random
-from anndata import AnnData
-import scanpy
-from ripser import Rips
-import umap
+# Import necessary librariesps
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-from scipy import sparse
-from scipy.stats import rankdata, entropy
-from sklearn.cluster import KMeans
-from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier, kneighbors_graph
-from sklearn.metrics import pairwise_distances, pairwise
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sknetwork.clustering import Louvain
 from scipy.spatial import distance
+
+SEED = 42
 
 def density_downsampling(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame:
     """
@@ -31,7 +17,6 @@ def density_downsampling(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame
     Returns:
         pd.DataFrame: _description_
     """
-    print(df)
     #? Computes condensed pairwise Euclidean distances between all rows (samples)
     #? Converts condensed vector into a square distance matrix of shape (n, n)
     #? dist_m[i][j] contains the Euclidean distance between point i and j
@@ -40,14 +25,26 @@ def density_downsampling(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame
 
     #? sort the the matrix based on the axis=1 (row-wise) thus each line (represents the distance between i and his closest neighbors)
     #? we take the median of the second closest neighbor (index 1) because the first one is the point itself (distance 0)
-    sorted_dist_m = np.sort(dist_matrix , axis=1)
+    sorted_dist_m = np.sort(dist_matrix)
     median_min_dist = np.median(sorted_dist_m[:,1])
     dist_threshold = np.max(median_min_dist)
+
+    local_density = np.sum((dist_matrix < dist_threshold), axis=0) #! we removed the "1*" for converting to int
+
+    od_threshold = np.quantile(local_density, od)
+    td_threshold = np.quantile(local_density, td)
     
-    local_density = np.sum(dist_matrix < dist_threshold, axis=0) #! we removed the "1*" for converting to int
-    
-    
-    return df
+    np.random.seed(SEED)
+    index_to_keep = []
+    for i in range(len(local_density)):
+        if local_density[i] < od_threshold:
+            continue
+        elif local_density[i] > td_threshold:
+            if np.random.uniform(0,1) < td_threshold/local_density[i]:
+                index_to_keep.append(i)
+        else:
+            index_to_keep.append(i)
+    return df.iloc[index_to_keep] #! care we changed from df[index_to_keep,:] to df.iloc[index_to_keep]
 
 def normalize(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -91,11 +88,11 @@ def preprocessing(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame:
     """
     
     df = density_downsampling(df, od, td)
-    #df = normalize(df)
+    df = normalize(df)
     return df
 
 
 if __name__ == "__main__":
     # test the functions
     df = pd.read_csv("/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv", index_col=0)
-    df = preprocessing(df, 0.1, 0.9)
+    print(preprocessing(df, 0.1, 0.9))
