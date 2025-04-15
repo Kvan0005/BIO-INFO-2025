@@ -39,7 +39,7 @@ from . import preprocessing as pp
 #from . import datasets, logging, queries, external, get
 
 from anndata import AnnData
-from anndata import read_h5ad, read_csv, read_excel, read_hdf, read_loom, read_mtx, read_text, read_umi_tools
+from anndata.io import read_h5ad, read_csv, read_excel, read_hdf, read_loom, read_mtx, read_text, read_umi_tools
 from .readwrite import read, read_10x_h5, read_10x_mtx, write, read_visium
 from .neighbors import Neighbors
 

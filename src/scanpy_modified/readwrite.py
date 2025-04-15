@@ -9,8 +9,7 @@ import pandas as pd
 from matplotlib.image import imread
 import tables
 import anndata
-from anndata import (
-    AnnData,
+from anndata.io import (
     read_csv,
     read_text,
     read_excel,
@@ -18,6 +17,7 @@ from anndata import (
     read_loom,
     read_hdf,
 )
+from anndata import AnnData
 from anndata import read as read_h5ad
 
 from ._settings import settings

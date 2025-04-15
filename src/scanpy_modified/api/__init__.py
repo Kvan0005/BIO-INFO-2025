@@ -11,7 +11,7 @@ from anndata import AnnData
 from ..neighbors import Neighbors
 
 from anndata import read as read_h5ad
-from anndata import (
+from anndata.io import (
     read_csv,
     read_excel,
     read_hdf,

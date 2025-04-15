@@ -29,7 +29,7 @@ def density_downsampling(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame
     median_min_dist = np.median(sorted_dist_m[:,1])
     dist_threshold = np.max(median_min_dist)
 
-    local_density = np.sum((dist_matrix < dist_threshold), axis=0) #! we removed the "1*" for converting to int
+    local_density = np.sum(1*(dist_matrix < dist_threshold), axis=0) #! we removed the "1*" for converting to int
 
     od_threshold = np.quantile(local_density, od)
     td_threshold = np.quantile(local_density, td)
@@ -60,7 +60,10 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
         type: pandas.DataFrame
         summary: The normalized DataFrame (values between 0 and 1).
     """
-    return (df - df.min()) / (df.max() - df.min())
+    df = (df - df.min(axis=0)) / (df.max(axis=0) - df.min(axis=0))
+    # Replace NaN values with 0
+    df = df.fillna(0)
+    return df
 
 # Preprocessing code
 def preprocessing(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame:
@@ -94,5 +97,14 @@ def preprocessing(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame:
 
 if __name__ == "__main__":
     # test the functions
-    df = pd.read_csv("/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv", index_col=0)
-    print(preprocessing(df, 0.1, 0.9))
+    df = pd.read_csv("/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/NKT-differentiation_engel.rds.csv", index_col=0)
+    names = df.columns
+    if "Traj53" in names:
+        traj53_index = names.get_loc("Traj53")
+        print(df.iloc[:, traj53_index])
+    else:
+        print("Traj53 not found in the dataframe")
+    # get the collumn of Traj53
+    # traj53_index = df.columns
+    # print(df.iloc[:, traj53_index])
+    #print(preprocessing(df, 0.1, 0.9))
