@@ -19,10 +19,10 @@ from sknetwork.clustering import Louvain
 from scipy.spatial import distance
 from math import floor
 
-from utils import normalize
+from utils import normalize, density_downsampling, SEED
 FEATURES_MAX_THRESHOLD = 5 #? 5 is given in the paper dc about logic
 
-def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool = False) -> np.number | np.ndarray:
+def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool = False) -> np.number:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 5
@@ -46,9 +46,10 @@ def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool
         plt.show()
     else:
         plt.close()
+    assert type(ent) == np.number, "ent is not a float or number"
     return  ent
 
-def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np.number | np.ndarray:
+def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np.number:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 5
@@ -73,6 +74,7 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     entropy_value = entropy(normalize_histogram, base=num_bins)
     entropy_value = np.log(entropy_value)
     plt.show() if visualize else plt.close()
+    assert type(entropy_value) == np.number, "entropy_value is not a float or number"
     return entropy_value
 
 def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> float | np.floating:
@@ -139,8 +141,8 @@ def features_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  f
     for _ in range(REPEATITIONS):
         bootstrap = np.random.uniform(dim_min, dim_max, (n, nb_features))
 
-        geo_dist_df= get_geodestic_distance(df, threshold)
-        geo_dist_bootstrap = get_geodestic_distance(bootstrap, threshold)
+        geo_dist_df= get_geodestic_distance(df, {})
+        geo_dist_bootstrap = get_geodestic_distance(bootstrap, {})
 
         geo_dist_df = adapt_inf(geo_dist_df)
         geo_dist_bootstrap = adapt_inf(geo_dist_bootstrap)
@@ -157,13 +159,13 @@ def features_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  f
     assert type(ripley_score) == np.float64, "ripley_score is not a float"
     return ripley_score / REPEATITIONS 
 
-def get_geodestic_distance(df, threshold: int = 100) -> np.ndarray:
+def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
     """
     Calculate the geodesic distance for the given data
     """
     data = anndata.AnnData(df)
     data.uns['iroot'] = 0
-    scanpy.pp.neighbors(data, n_neighbors=threshold)
+    scanpy.pp.neighbors(data, **neighbours_parameter)
     scanpy.tl.diffmap(data)
     scanpy.tl.dpt(data)
     return np.stack(data.obs['dpt_distances'])  # type: ignore dont know how to fix this warning
@@ -187,23 +189,48 @@ def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
         k_value_df.loc[i] = k_value
     return normalize(k_value_df).values #the .values is to convert the dataframe to a numpy array
 
-# def test(data):
-#     X = data
-#     n, dim = X.shape
-#     MIN_MAX = []
-#     for i in range(dim):
-#         dim_min = np.min(X.iloc[:,i])
-#         dim_max = np.max(X.iloc[:,i])
-#         MIN_MAX.append((dim_min,dim_max))
-#     num_repeats = 1
-#     rScore = 0 
-#     for i in range(num_repeats):
-#         SDATA = []
-#         for i in range(len(MIN_MAX)):
-#             shuffled_data = np.random.uniform(MIN_MAX[i][0],MIN_MAX[i][1],n)
-#             SDATA.append(shuffled_data)
-#         print(len(SDATA))
-#         print(len(SDATA[0]))
+def features_avg_connection(df) -> float | np.floating:
+
+    c = density_downsampling(df, od=0.03, td=0.3)
+    K = np.linspace(0.03,1,20)
+    k_scores = []
+    for k in K:
+        sc = generate_score_k_dpt(c, k) 
+        k_scores.append(sc)
+    score = np.trapezoid(k_scores, K/np.max(K))
+    assert type(score) == np.float64, "score is not a float"
+    return score
+
+def generate_score_k_dpt(df, k: float) -> float:
+    np.random.seed(SEED)
+    if len(df)>200:
+        REPETITIONS = 5
+        final_score = 0
+        for _ in range(REPETITIONS):
+            idx = np.random.randint(0, len(df), size=200)
+            t_data = df.iloc[idx]
+            #? WTF is DX 
+            geo_dist_df = get_geodestic_distance(t_data, {})
+            geo_dist_df = adapt_inf(geo_dist_df)
+            knn_distance_based = NearestNeighbors(n_neighbors=floor(len(t_data)*k), metric="precomputed").fit(geo_dist_df)
+            
+            A = knn_distance_based.kneighbors_graph(geo_dist_df).toarray() #type: ignore
+            SA = ((A+A.T) > 1.5)*1 #dumb 
+            
+            old_total = 0
+            total = np.sum(SA)
+            loop = 0
+            while total != old_total and (loop:=loop+1) <= 10:
+                old_total = total
+                SA = ((SA @ SA) > 1)*1 #dumb
+                total = np.sum(SA)
+            avg_connect = np.mean(SA, axis=0)
+            final_score += np.median(avg_connect)
+        return final_score / REPETITIONS
+    #TODO: finish the else case tomorrow
+                
+                
+    return 0
 
 if __name__ == "__main__":
     # Example usage
@@ -215,7 +242,7 @@ if __name__ == "__main__":
     #         df = pd.read_csv(path + file, index_col=0)
     #         df = preprocessing(df, 0.1, 0.9)
     #         metric_persistent_homology(df, num_bins=10)
-    path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/NKT-differentiation_engel.rds.csv"
+    path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv"
     df = pd.read_csv(path, index_col=0)
     df = preprocessing(df, 0.1, 0.9)
-    features_ripley_dpt(df, threshold=100, visualize=True)
+    features_avg_connection(df)
