@@ -73,11 +73,50 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     plt.show() if visualize else plt.close()
     return entropy_value
 
-def metric_vector(df, cells_per_cluster:int, metric: str) -> float:
+def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> float | np.floating:
     df = PCA(n_components=FEATURES_MAX_THRESHOLD).fit_transform(df)
-    _number_of_clusters = min(floor(len(df)/cells_per_cluster), 100)
-    
-    
+    number_of_clusters = min(floor(len(df)/cells_per_cluster), 100) #? 5% is given by the formula X/20 => 5% of the data
+    score = 0
+    REPETITIONS = 10
+    for seed in range(REPETITIONS):
+        if seed != 0: #! del this line after testing
+            continue
+        np.random.seed(seed)
+        kmeans = KMeans(n_clusters=number_of_clusters, random_state=seed).fit(df)
+        for index in range(number_of_clusters):
+            if index != 0: #! del this line after testing
+                continue
+            clusters = kmeans.cluster_centers_.tolist()
+            print(clusters)
+            all_dist = pairwise_distances(clusters , metric=metric)
+            threshold = np.percentile(all_dist[np.triu(all_dist, 1) !=0], 20)
+            current_idx = index
+            kmean_order = []
+            condition = True
+            while condition:
+                condition = False
+                kmean_order.append(clusters.pop(current_idx))
+                dist_current = pairwise_distances(np.array(kmean_order[-1]).reshape(1,-1), clusters, metric=metric) #todo later
+                print("dimension", len(kmean_order[-1]), len(clusters))
+                print("dist_current", dist_current)
+                if len(dist_current) == 1:
+                    break
+                next_index = np.argsort(dist_current)[0]  
+                if dist_current[next_index] > threshold:
+                    break
+                current_idx = next_index
+            vectors = []
+            for j in range(len(kmean_order)-1):
+                d1 = np.array(kmean_order[j])
+                d2 = np.array(kmean_order[j+1])
+                vectors.append(d2-d1)       
+            try:
+                norm = np.linalg.norm(np.sum(vectors,axis = 0),ord=df.shape[1])
+                score += norm
+            except ZeroDivisionError:
+                pass
+    return score/(REPETITIONS*number_of_clusters)
+
 if __name__ == "__main__":
     # Example usage
     from utils import preprocessing
@@ -91,5 +130,5 @@ if __name__ == "__main__":
     path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/NKT-differentiation_engel.rds.csv"
     df = pd.read_csv(path, index_col=0)
     df = preprocessing(df, 0.1, 0.9)
-    print(metric_persistent_homology(df, num_bins=10))
+    metric_vector(df)
     
