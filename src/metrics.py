@@ -18,6 +18,8 @@ from sklearn.preprocessing import StandardScaler
 from sknetwork.clustering import Louvain
 from scipy.spatial import distance
 from math import floor
+
+from utils import normalize
 FEATURES_MAX_THRESHOLD = 5 #? 5 is given in the paper dc about logic
 
 def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool = False) -> np.number | np.ndarray:
@@ -117,6 +119,92 @@ def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> floa
                 pass
     return score/(REPETITIONS*number_of_clusters)
 
+def features_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  float | np.floating:
+    """_summary_
+
+    Args:
+        df (_type_): _description_
+        threshold (int, optional): _description_. Defaults to 100.
+        visualize (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        float | np.floating: _description_
+    """
+    # "n" is the number of samples in the dataset
+    n , nb_features = df.shape
+    dim_min = np.min(df, axis=0)
+    dim_max = np.max(df, axis=0)
+    ripley_score = 0
+    REPEATITIONS = 1
+    for _ in range(REPEATITIONS):
+        bootstrap = np.random.uniform(dim_min, dim_max, (n, nb_features))
+
+        geo_dist_df= get_geodestic_distance(df, threshold)
+        geo_dist_bootstrap = get_geodestic_distance(bootstrap, threshold)
+
+        geo_dist_df = adapt_inf(geo_dist_df)
+        geo_dist_bootstrap = adapt_inf(geo_dist_bootstrap)
+
+        k_geo_dist_df = k_function(geo_dist_df, threshold)
+        k_geo_dist_bootstrap = k_function(geo_dist_bootstrap, threshold)
+
+        sum_n = k_geo_dist_df + k_geo_dist_bootstrap
+        k_geo_dist_df = k_geo_dist_df[sum_n != 2]
+        k_geo_dist_bootstrap = k_geo_dist_bootstrap[sum_n != 2]
+        
+        local_score = np.trapezoid(np.abs(k_geo_dist_df - k_geo_dist_bootstrap), dx=1/len(k_geo_dist_df))
+        ripley_score += local_score
+    assert type(ripley_score) == np.float64, "ripley_score is not a float"
+    return ripley_score / REPEATITIONS 
+
+def get_geodestic_distance(df, threshold: int = 100) -> np.ndarray:
+    """
+    Calculate the geodesic distance for the given data
+    """
+    data = anndata.AnnData(df)
+    data.uns['iroot'] = 0
+    scanpy.pp.neighbors(data, n_neighbors=threshold)
+    scanpy.tl.diffmap(data)
+    scanpy.tl.dpt(data)
+    return np.stack(data.obs['dpt_distances'])  # type: ignore dont know how to fix this warning
+
+def adapt_inf(df: np.ndarray) -> np.ndarray:
+    """
+    Adapt the inf values in the ndarray to the max value time 1.5
+    """
+    df[df == np.inf] = 1.5 * np.max(df[df != np.inf])
+    return df
+
+def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
+    """
+    Calculate the k function for the given data
+    """
+    xs = np.linspace(0, np.nanmax(df[df != -np.inf])+1, threshold_size)
+    k_value_df = pd.DataFrame(index=range(len(xs)), columns=["k_value"])
+    for i in range(len(xs)):
+        threshold = xs[i]
+        k_value = np.sum(np.sum(df < threshold, axis=0) / df.shape[0]) # the number of samples is still the same as from the original data df/bootstrap (df.shape[0])
+        k_value_df.loc[i] = k_value
+    return normalize(k_value_df).values #the .values is to convert the dataframe to a numpy array
+
+# def test(data):
+#     X = data
+#     n, dim = X.shape
+#     MIN_MAX = []
+#     for i in range(dim):
+#         dim_min = np.min(X.iloc[:,i])
+#         dim_max = np.max(X.iloc[:,i])
+#         MIN_MAX.append((dim_min,dim_max))
+#     num_repeats = 1
+#     rScore = 0 
+#     for i in range(num_repeats):
+#         SDATA = []
+#         for i in range(len(MIN_MAX)):
+#             shuffled_data = np.random.uniform(MIN_MAX[i][0],MIN_MAX[i][1],n)
+#             SDATA.append(shuffled_data)
+#         print(len(SDATA))
+#         print(len(SDATA[0]))
+
 if __name__ == "__main__":
     # Example usage
     from utils import preprocessing
@@ -130,5 +218,4 @@ if __name__ == "__main__":
     path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/NKT-differentiation_engel.rds.csv"
     df = pd.read_csv(path, index_col=0)
     df = preprocessing(df, 0.1, 0.9)
-    metric_vector(df)
-    
+    features_ripley_dpt(df, threshold=100, visualize=True)
