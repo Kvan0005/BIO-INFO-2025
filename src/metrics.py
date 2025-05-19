@@ -52,7 +52,7 @@ def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool
 def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np.number:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
-    pg: 5
+    pg: 6
     title: Scoring metric 2 -persistent homology
     """  
     df = anndata.AnnData(df)
@@ -190,47 +190,77 @@ def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
     return normalize(k_value_df).values #the .values is to convert the dataframe to a numpy array
 
 def features_avg_connection(df) -> float | np.floating:
-
+    """
+    This is the metric 5 also known as the "degrees of connectivity" metric.    
+    """
     c = density_downsampling(df, od=0.03, td=0.3)
-    K = np.linspace(0.03,1,20)
+    K = np.linspace(0.03,1,20) #* 5% to 95% of the number of data points. | shouldn't be linspace(0.05, 0.95, 19) 
     k_scores = []
     for k in K:
-        sc = generate_score_k_dpt(c, k) 
-        k_scores.append(sc)
+        score_k_dpt = generate_score_k_dpt(c, k) 
+        k_scores.append(score_k_dpt)
     score = np.trapezoid(k_scores, K/np.max(K))
     assert type(score) == np.float64, "score is not a float"
     return score
 
-def generate_score_k_dpt(df, k: float) -> float:
+def generate_score_k_dpt(df, k: float) -> float|np.floating:
+    """
+
+    Args:
+        df (_type_): _description_
+        k (float): _description_
+
+    Returns:
+        float|np.floating: _description_
+    """
     np.random.seed(SEED)
     if len(df)>200:
         REPETITIONS = 5
         final_score = 0
         for _ in range(REPETITIONS):
             idx = np.random.randint(0, len(df), size=200)
-            t_data = df.iloc[idx]
-            #? WTF is DX 
+            t_data = df.iloc[idx] 
             geo_dist_df = get_geodestic_distance(t_data, {})
             geo_dist_df = adapt_inf(geo_dist_df)
             knn_distance_based = NearestNeighbors(n_neighbors=floor(len(t_data)*k), metric="precomputed").fit(geo_dist_df)
             
-            A = knn_distance_based.kneighbors_graph(geo_dist_df).toarray() #type: ignore
-            SA = ((A+A.T) > 1.5)*1 #dumb 
+            Adjacency = knn_distance_based.kneighbors_graph(geo_dist_df).toarray() #type: ignore
             
-            old_total = 0
-            total = np.sum(SA)
-            loop = 0
-            while total != old_total and (loop:=loop+1) <= 10:
-                old_total = total
-                SA = ((SA @ SA) > 1)*1 #dumb
-                total = np.sum(SA)
-            avg_connect = np.mean(SA, axis=0)
+
+            avg_connect = average_connection(Adjacency)
             final_score += np.median(avg_connect)
         return final_score / REPETITIONS
-    #TODO: finish the else case tomorrow
-                
-                
-    return 0
+    else:
+        geo_dist_df = get_geodestic_distance(df, {})
+        geo_dist_df = adapt_inf(geo_dist_df)
+        
+        knn_distance_based: NearestNeighbors = NearestNeighbors(n_neighbors=max(1, floor(len(df)*k)), metric="precomputed").fit(geo_dist_df)
+        
+        Adjacency = knn_distance_based.kneighbors_graph(geo_dist_df).toarray() #type: ignore
+        avg_connect = average_connection(Adjacency)
+        score = np.median(avg_connect)
+        return score
+
+def average_connection(A: np.ndarray)-> np.ndarray:
+    """
+    This is a helper function to calculate the average connection
+    
+    Args:
+        A (np.ndarray): is the Adjacency matrix of the graph
+        
+    Returns:
+        np.ndarray: the average connection of the graph 
+    """
+    SA = ((A+A.T) > 1.5)*1
+    old_total = 0
+    total = np.sum(SA)
+    loop = 0
+    while total != old_total and (loop:=loop+1) <= 10:
+        old_total = total
+        SA = ((SA @ SA) > 1)*1
+        total = np.sum(SA)
+    return np.mean(SA, axis=0) 
+
 
 if __name__ == "__main__":
     # Example usage
