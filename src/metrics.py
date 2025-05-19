@@ -1,5 +1,6 @@
 import sys
 import random
+import warnings
 import anndata
 import scanpy_modified as scanpy
 from ripser import Rips
@@ -18,9 +19,12 @@ from sklearn.preprocessing import StandardScaler
 from sknetwork.clustering import Louvain
 from scipy.spatial import distance
 from math import floor
+from tqdm import tqdm
 
 from utils import normalize, density_downsampling, SEED
 FEATURES_MAX_THRESHOLD = 5 #? 5 is given in the paper dc about logic
+
+scanpy.settings.verbosity = 0
 
 def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool = False) -> np.number:
     """
@@ -35,7 +39,7 @@ def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool
     scanpy.pp.neighbors(df,n_neighbors=max(10,int(0.005*size_df)), method='umap',knn=True)
     scanpy.tl.diffmap(df)
     scanpy.tl.dpt(df)
-    tmp = np.stack(df.obs['dpt_distances'])  # type: ignore dont know how to fix this warning
+    tmp = np.stack(df.obs['dpt_distances'].to_list()) 
     tmp[tmp == np.inf] = 1.5 * np.max(tmp[tmp != np.inf]) 
     tmp[tmp == -np.inf] = -1 * np.min(tmp[tmp != -np.inf]) 
     a = plt.hist(tmp[np.triu(tmp, 1) != 0], bins = num_bins)
@@ -60,7 +64,7 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     scanpy.pp.neighbors(df)
     scanpy.tl.diffmap(df)
     scanpy.tl.dpt(df)
-    tmp = np.stack(df.obs['dpt_distances'])  # type: ignore dont know how to fix this warning
+    tmp = np.stack(df.obs['dpt_distances'].to_list()) 
     # get line with inf values
     tmp[tmp == np.inf] = np.random.normal(1.5, 0.1) * np.max(tmp[tmp != np.inf])
     tmp[tmp == -np.inf] = -1 * np.min(tmp[tmp != -np.inf])
@@ -163,13 +167,16 @@ def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
     """
     Calculate the geodesic distance for the given data
     """
-    data = anndata.AnnData(df)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=UserWarning)
+        data = anndata.AnnData(df)
     data.uns['iroot'] = 0
-    scanpy.pp.neighbors(data, **neighbours_parameter)
+    scanpy.pp.pca(data)
+    scanpy.pp.neighbors(data, **neighbours_parameter, use_rep='X_pca')
     scanpy.tl.diffmap(data)
     scanpy.tl.dpt(data)
-    return np.stack(data.obs['dpt_distances'])  # type: ignore dont know how to fix this warning
-
+    return np.stack(data.obs['dpt_distances'].to_list())
+     
 def adapt_inf(df: np.ndarray) -> np.ndarray:
     """
     Adapt the inf values in the ndarray to the max value time 1.5
@@ -196,7 +203,7 @@ def features_avg_connection(df) -> float | np.floating:
     c = density_downsampling(df, od=0.03, td=0.3)
     K = np.linspace(0.03,1,20) #* 5% to 95% of the number of data points. | shouldn't be linspace(0.05, 0.95, 19) 
     k_scores = []
-    for k in K:
+    for k in tqdm(K):
         score_k_dpt = generate_score_k_dpt(c, k) 
         k_scores.append(score_k_dpt)
     score = np.trapezoid(k_scores, K/np.max(K))
@@ -275,4 +282,4 @@ if __name__ == "__main__":
     path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv"
     df = pd.read_csv(path, index_col=0)
     df = preprocessing(df, 0.1, 0.9)
-    features_avg_connection(df)
+    print(features_avg_connection(df))

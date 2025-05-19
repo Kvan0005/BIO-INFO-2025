@@ -66,7 +66,7 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # Preprocessing code
-def preprocessing(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame:
+def preprocessing(df: pd.DataFrame , od: float, td: float) -> pd.DataFrame:
     """
     Preprocess the DataFrame by filtering out rows with NaN values and applying a threshold.
     
