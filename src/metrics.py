@@ -1,23 +1,16 @@
-import sys
-import random
 import warnings
 import anndata
 import scanpy_modified as scanpy
 from ripser import Rips
-import umap
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import sparse
-from scipy.stats import rankdata, entropy
+from scipy.stats import entropy
 from sklearn.cluster import KMeans
-from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier, kneighbors_graph
-from sklearn.metrics import pairwise_distances, pairwise
-from sklearn.manifold import TSNE
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import pairwise_distances
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sknetwork.clustering import Louvain
-from scipy.spatial import distance
 from math import floor
 from tqdm import tqdm
 
@@ -50,7 +43,7 @@ def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool
         plt.show()
     else:
         plt.close()
-    assert type(ent) == np.number, "ent is not a float or number"
+    assert type(ent) is np.number, "ent is not a float or number"
     return  ent
 
 def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np.number:
@@ -78,7 +71,7 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     entropy_value = entropy(normalize_histogram, base=num_bins)
     entropy_value = np.log(entropy_value)
     plt.show() if visualize else plt.close()
-    assert type(entropy_value) == np.number, "entropy_value is not a float or number"
+    assert type(entropy_value) is np.number, "entropy_value is not a float or number"
     return entropy_value
 
 def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> float | np.floating:
@@ -125,7 +118,7 @@ def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> floa
                 pass
     return score/(REPETITIONS*number_of_clusters)
 
-def features_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  float | np.floating:
+def metric_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  float | np.floating:
     """_summary_
 
     Args:
@@ -160,7 +153,7 @@ def features_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  f
         
         local_score = np.trapezoid(np.abs(k_geo_dist_df - k_geo_dist_bootstrap), dx=1/len(k_geo_dist_df))
         ripley_score += local_score
-    assert type(ripley_score) == np.float64, "ripley_score is not a float"
+    assert type(ripley_score) is np.float64, "ripley_score is not a float"
     return ripley_score / REPEATITIONS 
 
 def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
@@ -196,7 +189,7 @@ def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
         k_value_df.loc[i] = k_value
     return normalize(k_value_df).values #the .values is to convert the dataframe to a numpy array
 
-def features_avg_connection(df) -> float | np.floating:
+def metric_avg_connection(df) -> float | np.floating:
     """
     This is the metric 5 also known as the "degrees of connectivity" metric.    
     """
@@ -207,7 +200,7 @@ def features_avg_connection(df) -> float | np.floating:
         score_k_dpt = generate_score_k_dpt(c, k) 
         k_scores.append(score_k_dpt)
     score = np.trapezoid(k_scores, K/np.max(K))
-    assert type(score) == np.float64, "score is not a float"
+    assert type(score) is np.float64, "score is not a float"
     return score
 
 def generate_score_k_dpt(df, k: float) -> float|np.floating:
@@ -282,4 +275,4 @@ if __name__ == "__main__":
     path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv"
     df = pd.read_csv(path, index_col=0)
     df = preprocessing(df, 0.1, 0.9)
-    print(features_avg_connection(df))
+    print(metric_avg_connection(df))

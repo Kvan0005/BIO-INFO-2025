@@ -19,41 +19,102 @@ from sknetwork.clustering import Louvain
 from scipy.spatial import distance
 from math import floor
 from tqdm import tqdm
-
+from metrics import metric_distribution_of_pairwise_distances, metric_persistent_homology, metric_vector, metric_ripley_dpt, metric_avg_connection 
 from utils import preprocessing
 
+def original_scoring(df, num_downsample= 5000):
+    if len(df) > num_downsample:
+        tmp = []
+        for i in range(3):
+            np.random.seed(i)
+            random.seed(i)
+            df = df[random.sample(range(len(df)), num_downsample),:]
+            tmp.append(calculate_metrics(df)) 
+        scores = list(np.median(np.stack(tmp),axis=0))
+    else:
+        scores = calculate_metrics(df)
+    return scores
 
-def sc_vis(file):
-    print('reding ... {}'.format(file))
-    df = pd.read_csv(file, index_col=0)
+def our_scoring(df, num_downsample= 5000):
+    if len(df) > num_downsample:
+        tmp = []
+        for i in range(3):
+            np.random.seed(i) # for reproducibility but not necessary due to seed being set in the function
+            sampled_df = df.sample(n_samples=num_downsample, random_state=i)
+            tmp.append(calculate_metrics(sampled_df))
+        scores = list(np.median(np.stack(tmp),axis=0))
+    else:
+        scores = calculate_metrics(df)
+    return scores
+
+def calculate_metrics(df: pd.DataFrame) -> list[np.floating | float | np.number]:
     df = preprocessing(df, 0.05, 1)
-    print('size of the file is {}'.format(df.shape))
-    data = np.array(df)
-    data = anndata.AnnData(data)
-    data.uns['iroot'] = 0 
-    plt.figure(figsize=(8,8))
-    scanpy.set_figure_params(dpi=80, dpi_save=150, figsize=(5,5)) #TODO checkpoint
-    scanpy.tl.pca(data, svd_solver='arpack')
-    scanpy.pp.neighbors(data)
-    scanpy.tl.diffmap(data)
-    scanpy.tl.dpt(data)
-    scanpy.tl.diffmap(data,color=['dpt_pseudotime'])
+    sc1 = metric_distribution_of_pairwise_distances(df, num_bins = 10)
+    sc2 = metric_persistent_homology(df,num_bins = 3)
+    sc3 = metric_vector(df)
+    sc4 = metric_ripley_dpt(df)
+    sc5 = metric_avg_connection(df)
+    return [sc1,sc2,sc3,sc4,sc5]
     
-    pca = PCA(n_components=20)
-    embedding_pca = pca.fit_transform(df)
-    A = kneighbors_graph(embedding_pca, 10, mode='connectivity', include_self=True)
-    louvain = Louvain()
-    labels = louvain.fit_transform(A)
-    Umap = umap.UMAP()
-    embedding_umap = Umap.fit_transform(embedding_pca)
-    fig = plt.figure(figsize=(5,5))
-    plt.scatter(embedding_umap[:,0],embedding_umap[:,1],c=labels, alpha=1, cmap='tab20')
-    plt.xticks([])
-    plt.yticks([])
-    plt.grid(b=None)
+    
+def explain_score(sc_traj_clstr_score):
+    META_SCORES = list(np.load('data/simulated_metascores_12000.npy')) # Loading pre-computed scores for simulated datasets
+
+    clstr = META_SCORES[:3000]
+    traj = META_SCORES[3000:6000]
+    clstr_r1 = META_SCORES[6000:9000]
+    traj_r1 = META_SCORES[9000:]
+   
+
+    npy_sim = np.array(META_SCORES)
+    feature_names = ['P-dist','Homology','Vector','Ripleys','Deg. of Sep.']
+
+    metric = 'euclidean'
+    seed = 1
+    n_neighbors = 50
+    min_dist = 0.6
+    figsize = 5
+
+    scaler = StandardScaler()
+    tmp_np = scaler.fit_transform(npy_sim)
+    tmp_reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=2,random_state=seed,min_dist=min_dist, metric=metric)
+    embedding = tmp_reducer.fit_transform(tmp_np)
+    print("type(embedding):",type(embedding))
+    c = [0]*3000 + [1]*3000 + [0]*3000 + [1]*3000
+
+    neigh = KNeighborsClassifier(n_neighbors=100)
+    neigh.fit(embedding, c) #type: ignore
+
+    p = neigh.predict_proba(embedding)[:,1] #type: ignore
+
+    ####################
+    ####################
+    INPUT_SCALED = scaler.transform(np.array(sc_traj_clstr_score).reshape(1, -1))
+    UMAP_PROJECTION = tmp_reducer.transform(INPUT_SCALED.reshape(1, -1))    
+    print("type(UMAP_PROJECTION):" , type(UMAP_PROJECTION))
+    ####################
+    ####################
+
+    plt.figure(figsize=(figsize,figsize))
+    plt.scatter(embedding[:,0],embedding[:,1], c = p, alpha = 1) #type: ignore
+    plt.scatter(UMAP_PROJECTION[0][0],UMAP_PROJECTION[0][1],color='red',marker='^') #type: ignore
     plt.show()
-    #plt.savefig('{}.png'.format(file))
+
+    for i in range(len(feature_names)):
+        feat = i
+        plt.figure(figsize=(5,3))
+        plt.violinplot([np.array(clstr)[:,feat],
+                        np.array(clstr_r1)[:,feat],
+                        np.array(traj_r1)[:,feat],
+                        np.array(traj)[:,feat]],
+                      showmeans = True, showextrema=False)
+        plt.axhline(sc_traj_clstr_score[i],c='red',ls='--')
+        plt.title(feature_names[i], fontsize = 20)
+        plt.xticks(fontsize=15, rotation=315)
+        plt.xticks([1, 2, 3, 4], ['Clear Clusters','Noisy Clusters','Noise Trajectory','Clear Trajectory'])
+        plt.show()
     
+
 if __name__ == '__main__':
     file = "data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv"
-    sc_vis(file)
+   
