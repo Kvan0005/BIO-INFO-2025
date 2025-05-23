@@ -5,7 +5,7 @@ from scipy.spatial import distance
 
 SEED = 42
 
-def density_downsampling(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame:
+def density_downsampling(df, od: float, td: float):
     """
 
     cf: https://doi.org/10.1038/s41587-019-0071-9
@@ -44,9 +44,10 @@ def density_downsampling(df: pd.DataFrame, od: float, td: float) -> pd.DataFrame
                 index_to_keep.append(i)
         else:
             index_to_keep.append(i)
-    return df.iloc[index_to_keep] #! care we changed from df[index_to_keep,:] to df.iloc[index_to_keep]
+    #df is a numpy array
+    return df[index_to_keep] #! care we changed from df[index_to_keep,:] to df.iloc[index_to_keep]
 
-def normalize(df: pd.DataFrame) -> pd.DataFrame:
+def normalize(df: np.ndarray) -> np.ndarray:
     """
     Normalizes the input data to a range between 0 and 1.
     
@@ -61,12 +62,16 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
         summary: The normalized DataFrame (values between 0 and 1).
     """
     df = (df - df.min(axis=0)) / (df.max(axis=0) - df.min(axis=0))
+    #check if no NaN values
+    # if df.isnull().values.any():
+    #     print("DataFrame contains NaN values. Consider filling or dropping them.")
+    #     raise ValueError("DataFrame contains NaN values.")
     # Replace NaN values with 0
-    df = df.fillna(0)
+    # df = df.fillna(0)
     return df
 
 # Preprocessing code
-def preprocessing(df: pd.DataFrame , od: float, td: float) -> pd.DataFrame:
+def preprocessing(df: np.ndarray , od: float, td: float) -> np.ndarray:
     """
     Preprocess the DataFrame by filtering out rows with NaN values and applying a threshold.
     

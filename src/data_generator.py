@@ -31,7 +31,7 @@ def make_blob_elipse(num, mu_x, mu_y, sigma_x, sigma_y):
 def gen_cluster(num=1000,seed=1):
     np.random.seed(seed)
     random.seed(seed)
-    num_clusters = np.floor(np.random.exponential(scale=1.5)+2)
+    num_clusters = int(np.floor(np.random.exponential(scale=1.5)+2))
     prop = np.random.normal(5, 0.1, num_clusters) #SIGMA DETERMINES HOW UNBALANCED CLUSTERS ARE
     prop = prop/np.sum(prop)
     blobs = []
@@ -40,7 +40,6 @@ def gen_cluster(num=1000,seed=1):
     for i in range(num_clusters):
         x= center_cand_x.pop(random.randrange(len(center_cand_x)))
         y= center_cand_y.pop(random.randrange(len(center_cand_y)))
-        #print(x,y)
         blob1 = make_blob(int(num*prop[i]),x,y,np.random.normal(0.2,0.01))
         blobs.append(blob1)
     C = np.concatenate(blobs)
@@ -131,23 +130,41 @@ def gen_trajectory_random_extreme(num=1000):
     C = np.array([X2,Y2]).T
     return C
 
-def gen_random(num=1000, mode=genType.RANDOM, seed=1):
+def gen_random(num=1000, mode=genType.RANDOM, seed=1, ):
     np.random.seed(seed)
     random.seed(seed)
     match mode:
         case genType.RANDOM: 
-            ind = random.choice([0,1])
-            model_chosen= [gen_cluster_random,gen_trajectory_random][ind]
+            idx = random.choice([0,1])
+            model_chosen= [gen_cluster_random,gen_trajectory_random][idx]
         case genType.CLUSTER: 
             model_chosen = gen_cluster_random
-            ind = 0
+            idx = 0
         case genType.TRAJECTORY: 
             model_chosen = gen_trajectory_random
-            ind = 1
+            idx = 1
         case _:
             raise ValueError
     param = {}
     param['num'] = num 
     param["seed"] = seed
     C = model_chosen(**param)
-    return C, ind
+    return C, idx
+
+def gen_random_extreme(num=1000, mode=genType.RANDOM ):
+    match mode:
+        case genType.RANDOM: 
+            idx = random.choice([0,1])
+            model_chosen= [gen_cluster_random_extreme,gen_trajectory_random_extreme][idx]
+        case genType.CLUSTER: 
+            model_chosen = gen_cluster_random_extreme
+            idx = 0
+        case genType.TRAJECTORY: 
+            model_chosen = gen_trajectory_random_extreme
+            idx = 1
+        case _:
+            raise ValueError
+    param = {}
+    param['num'] = num 
+    C = model_chosen(**param)
+    return C, idx

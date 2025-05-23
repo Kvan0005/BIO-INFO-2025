@@ -20,7 +20,7 @@ from scipy.spatial import distance
 from math import floor
 from tqdm import tqdm
 from metrics import metric_distribution_of_pairwise_distances, metric_persistent_homology, metric_vector, metric_ripley_dpt, metric_avg_connection 
-from utils import preprocessing
+from utils2 import preprocessing
 
 def original_scoring(df, num_downsample= 5000):
     if len(df) > num_downsample:
@@ -35,26 +35,27 @@ def original_scoring(df, num_downsample= 5000):
         scores = calculate_metrics(df)
     return scores
 
-def our_scoring(df, num_downsample= 5000):
+def our_scoring(df: np.ndarray, num_downsample= 5000):
     if len(df) > num_downsample:
         tmp = []
         for i in range(3):
             np.random.seed(i) # for reproducibility but not necessary due to seed being set in the function
-            sampled_df = df.sample(n_samples=num_downsample, random_state=i)
+            sampled_df = df[np.random.choice(df.shape[0], num_downsample, replace=True),:] 
             tmp.append(calculate_metrics(sampled_df))
         scores = list(np.median(np.stack(tmp),axis=0))
     else:
         scores = calculate_metrics(df)
     return scores
 
-def calculate_metrics(df: pd.DataFrame) -> list[np.floating | float | np.number]:
+def calculate_metrics(df: np.ndarray) -> list[np.floating | float | np.number]:
     df = preprocessing(df, 0.05, 1)
-    sc1 = metric_distribution_of_pairwise_distances(df, num_bins = 10)
-    sc2 = metric_persistent_homology(df,num_bins = 3)
+    # sc1 = metric_distribution_of_pairwise_distances(df, num_bins = 10)
+    # sc2 = metric_persistent_homology(df,num_bins = 3)
     sc3 = metric_vector(df)
-    sc4 = metric_ripley_dpt(df)
-    sc5 = metric_avg_connection(df)
-    return [sc1,sc2,sc3,sc4,sc5]
+    # sc4 = metric_ripley_dpt(df)
+    # sc5 = metric_avg_connection(df)
+    return [0,0,sc3,0,0]
+    # return [sc1,sc2,sc3,sc4,sc5]
     
     
 def explain_score(sc_traj_clstr_score):
@@ -79,7 +80,6 @@ def explain_score(sc_traj_clstr_score):
     tmp_np = scaler.fit_transform(npy_sim)
     tmp_reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=2,random_state=seed,min_dist=min_dist, metric=metric)
     embedding = tmp_reducer.fit_transform(tmp_np)
-    print("type(embedding):",type(embedding))
     c = [0]*3000 + [1]*3000 + [0]*3000 + [1]*3000
 
     neigh = KNeighborsClassifier(n_neighbors=100)
@@ -91,7 +91,6 @@ def explain_score(sc_traj_clstr_score):
     ####################
     INPUT_SCALED = scaler.transform(np.array(sc_traj_clstr_score).reshape(1, -1))
     UMAP_PROJECTION = tmp_reducer.transform(INPUT_SCALED.reshape(1, -1))    
-    print("type(UMAP_PROJECTION):" , type(UMAP_PROJECTION))
     ####################
     ####################
 
