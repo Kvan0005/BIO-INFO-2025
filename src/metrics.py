@@ -82,32 +82,41 @@ def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> floa
     for seed in range(REPETITIONS):
         np.random.seed(seed)
         kmeans = KMeans(n_clusters=number_of_clusters, random_state=seed).fit(df)
+        clusters = kmeans.cluster_centers_
+        all_clusters_idx = np.arange(len(clusters))
+        all_dist = pairwise_distances(clusters , metric=metric)
+        threshold = np.percentile(all_dist[np.triu(all_dist, 1) !=0], 20)
         for index in range(number_of_clusters):
-            clusters = kmeans.cluster_centers_.tolist()
-            all_dist = pairwise_distances(clusters , metric=metric)
-            threshold = np.percentile(all_dist[np.triu(all_dist, 1) !=0], 20)
-            current_idx = index
             kmean_order = []
+            pos_kmean_order = []
+            current_idx = index
             for _ in range(len(clusters)):
-                kmean_order.append(clusters.pop(current_idx))
-                dist_current = pairwise_distances(np.array(kmean_order[-1]).reshape(1,-1), clusters, metric=metric)[0] #todo later
-                if len(dist_current) == 1:
+                kmean_order.append(clusters[current_idx])
+                pos_kmean_order.append(current_idx)
+                
+                dist_current = all_dist[current_idx]
+                if 1 == len(all_clusters_idx)-len(kmean_order):
                     break
-                next_index = np.argsort(dist_current)[0]  
+                next_index = get_next_index_not_in_kmean_order(dist_current, pos_kmean_order)
                 if dist_current[next_index] > threshold:
                     break
                 current_idx = next_index
-            vectors = []
-            for j in range(len(kmean_order)-1):
-                d1 = np.array(kmean_order[j])
-                d2 = np.array(kmean_order[j+1])
-                vectors.append(d2-d1)       
+            vectors = np.array([np.array(kmean_order[i+1]) - np.array(kmean_order[i]) for i in range(len(kmean_order)-1)])
             vectors_sum:np.ndarray = np.sum(vectors, axis=0)
             if not vectors_sum.all() == 0: #if the sum of the vectors is 0 then no need to calculate the norm  
                 norm = np.linalg.norm(vectors_sum,ord=df.shape[1])
                 score += norm
             
     return score/(REPETITIONS*number_of_clusters)
+
+def get_next_index_not_in_kmean_order(dist_current: np.ndarray, pos_kmean_order: list[int]) -> int:
+    closest_dist_index = 0
+    sorted_dist = np.argsort(dist_current)
+    next_index = sorted_dist[closest_dist_index]  
+    while next_index in pos_kmean_order:
+        closest_dist_index += 1
+        next_index = sorted_dist[closest_dist_index]
+    return next_index
 
 def metric_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  float | np.floating:
     """_summary_
@@ -156,7 +165,7 @@ def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
     data = anndata.AnnData(df)
     data.uns['iroot'] = 0
     scanpy.pp.pca(data)
-    scanpy.pp.neighbors(data, **neighbours_parameter, use_rep='X_pca')
+    scanpy.pp.neighbors(data, **neighbours_parameter, use_rep='X_pca', method='rapids')
     scanpy.tl.diffmap(data)
     scanpy.tl.dpt(data)
     return np.stack(data.obs['dpt_distances'].to_list())

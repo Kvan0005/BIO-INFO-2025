@@ -1,41 +1,12 @@
-import sys
-import random
-import anndata
-import scanpy_modified as scanpy
-from ripser import Rips
 import umap
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import sparse
-from scipy.stats import rankdata, entropy
-from sklearn.cluster import KMeans
-from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier, kneighbors_graph
-from sklearn.metrics import pairwise_distances, pairwise
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
-from sknetwork.clustering import Louvain
-from scipy.spatial import distance
-from math import floor
-from tqdm import tqdm
 from metrics import metric_distribution_of_pairwise_distances, metric_persistent_homology, metric_vector, metric_ripley_dpt, metric_avg_connection 
 from utils2 import preprocessing
 
-def original_scoring(df, num_downsample= 5000):
-    if len(df) > num_downsample:
-        tmp = []
-        for i in range(3):
-            np.random.seed(i)
-            random.seed(i)
-            df = df[random.sample(range(len(df)), num_downsample),:]
-            tmp.append(calculate_metrics(df)) 
-        scores = list(np.median(np.stack(tmp),axis=0))
-    else:
-        scores = calculate_metrics(df)
-    return scores
-
-def our_scoring(df: np.ndarray, num_downsample= 5000):
+def scoring(df: np.ndarray, num_downsample= 5000):
     if len(df) > num_downsample:
         tmp = []
         for i in range(3):
@@ -49,13 +20,12 @@ def our_scoring(df: np.ndarray, num_downsample= 5000):
 
 def calculate_metrics(df: np.ndarray) -> list[np.floating | float | np.number]:
     df = preprocessing(df, 0.05, 1)
-    # sc1 = metric_distribution_of_pairwise_distances(df, num_bins = 10)
-    # sc2 = metric_persistent_homology(df,num_bins = 3)
+    sc1 = metric_distribution_of_pairwise_distances(df, num_bins = 10)
+    sc2 = metric_persistent_homology(df,num_bins = 3)
     sc3 = metric_vector(df)
-    # sc4 = metric_ripley_dpt(df)
-    # sc5 = metric_avg_connection(df)
-    return [0,0,sc3,0,0]
-    # return [sc1,sc2,sc3,sc4,sc5]
+    sc4 = metric_ripley_dpt(df)
+    sc5 = metric_avg_connection(df)
+    return [sc1,sc2,sc3,sc4,sc5]
     
     
 def explain_score(sc_traj_clstr_score):

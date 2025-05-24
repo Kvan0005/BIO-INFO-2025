@@ -176,3 +176,6 @@ cython_debug/
 # ignore all data files from src/data/ except for the README
 src/data/*
 !src/data/README.md
+
+#scatterplot
+src/scatterplots/*
