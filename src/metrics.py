@@ -22,7 +22,15 @@ def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 5
-    title: Scoring metric 1 -distribution of pairwise distances
+    title: Scoring metric 1 - distribution of pairwise distances
+    
+    Args:
+        da (np.ndarrayy): Data array containing the data to be analyzed.
+        num_bins (int): Number of bins to use for the histogram.
+        visualize (bool): If True, displays the histogram plot. Defaults to False.
+        
+    Returns:
+        np.number: The entropy of the histogram of pairwise distances.
     """
     size_df = len(df)
     df = anndata.AnnData(df)
@@ -49,7 +57,15 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 6
-    title: Scoring metric 2 -persistent homology
+    title: Scoring metric 2 - persistent homology
+    
+    Args:
+        da (np.ndarrayy): Data array containing the data to be analyzed.
+        num_bins (int): Number of bins to use for the histogram.
+        visualize (bool): If True, displays the histogram plot. Defaults to False.
+        
+    Returns:
+        np.number: The entropy of the histogram of persistent homology distances.
     """   
     df = anndata.AnnData(df)
     df.uns['iroot'] = 0
@@ -74,6 +90,19 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     return entropy_value
 
 def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> float | np.floating:
+    """
+    ref: https://doi.org/10.1371/journal.pcbi.1011866
+    pg: 6
+    title: Scoring metric 3 – vector magnitude
+    
+    Args:
+        da (np.ndarrayy): Data array containing the data to be analyzed.
+        cells_per_cluster (int, optional): Number of cells per cluster. Defaults to 20.
+        metric (str, optional): Metric to use for clustering. Defaults to "euclidean".
+        
+    Returns:
+        float | np.floating: The score calculated based on the clustering and vector analysis.
+    """
     if df.shape[1] > FEATURES_MAX_THRESHOLD:
         df = PCA(n_components=FEATURES_MAX_THRESHOLD).fit_transform(df)
     number_of_clusters = min(floor(len(df)/cells_per_cluster), 100) #? 5% is given by the formula X/20 => 5% of the data
@@ -110,27 +139,39 @@ def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> floa
     return score/(REPETITIONS*number_of_clusters)
 
 def get_next_index_not_in_kmean_order(dist_current: np.ndarray, pos_kmean_order: list[int]) -> int:
+    """
+    Get the next index in the distance array that is not in the kmean order
+    
+    Args:
+        dist_current (np.ndarray): The current distance array.
+        pos_kmean_order (list[int]): The list of indices that are already in the kmean order.
+        
+    Returns:
+        int: The next index that is not in the kmean order.
+    """
     closest_dist_index = 0
     sorted_dist = np.argsort(dist_current)
-    next_index = sorted_dist[closest_dist_index]  
+    next_index = sorted_dist[closest_dist_index]
     while next_index in pos_kmean_order:
         closest_dist_index += 1
         next_index = sorted_dist[closest_dist_index]
     return next_index
 
 def metric_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  float | np.floating:
-    """_summary_
+    """
+    ref: https://doi.org/10.1371/journal.pcbi.1011866
+    pg: 6
+    title: Scoring method 4 – Ripley’s k function
 
     Args:
-        df (_type_): _description_
-        threshold (int, optional): _description_. Defaults to 100.
-        visualize (bool, optional): _description_. Defaults to False.
+        da (np.ndarrayy): Data array containing the data to be analyzed.
+        threshold (int, optional): Threshold for the k function. Defaults to 100.
+        visualize (bool, optional): If True, displays the plot. Defaults to False.
 
     Returns:
-        float | np.floating: _description_
+        float | np.floating: The Ripley score calculated from the k function.
     """
-    # "n" is the number of samples in the dataset
-    n , nb_features = df.shape
+    n , nb_features = df.shape # "n" is the number of samples in the dataset
     dim_min = np.min(df, axis=0)
     dim_max = np.max(df, axis=0)
     ripley_score = 0
@@ -159,6 +200,13 @@ def metric_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  flo
 def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
     """
     Calculate the geodesic distance for the given data
+    
+    Args:
+        df (np.ndarray): The data for which to calculate the geodesic distance.
+        neighbours_parameter (dict): Parameters for the neighbors function.
+    
+    Returns:
+        np.ndarray: The geodesic distance matrix.
     """
     # with warnings.catch_warnings():
     #     warnings.simplefilter("ignore", category=UserWarning)
@@ -172,14 +220,27 @@ def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
      
 def adapt_inf(df: np.ndarray) -> np.ndarray:
     """
-    Adapt the inf values in the ndarray to the max value time 1.5
+    Adapt the inf values in the ndarray to the max value time 1.5.
+    
+    Args:
+        df (np.ndarray): The data array to adapt.
+        
+    Returns:
+        np.ndarray: The adapted data array with inf values replaced.
     """
     df[df == np.inf] = 1.5 * np.max(df[df != np.inf])
     return df
 
 def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
     """
-    Calculate the k function for the given data
+    Calculate the k function for the given data.
+    
+    Args:
+        df (np.ndarray): The data array for which to calculate the k function.
+        threshold_size (int, optional): The size of the threshold. Defaults to 100.
+    
+    Returns:
+        np.ndarray: The k function values for the data.
     """
     xs = np.linspace(0, np.nanmax(df[df != -np.inf])+1, threshold_size)
     k_value_ndarray = np.zeros(len(xs))
@@ -191,7 +252,15 @@ def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
 
 def metric_avg_connection(df) -> float | np.floating:
     """
-    This is the metric 5 also known as the "degrees of connectivity" metric.    
+    ref: https://doi.org/10.1371/journal.pcbi.1011866
+    pg: 6
+    title: Scoring metric 5 – degrees of connectivity
+    
+    Args:
+        da (np.ndarrayy): Data array containing the data to be analyzed.
+    
+    Returns:
+        float | np.floating: The average connection score calculated from the data.
     """
     c = density_downsampling(df, od=0.03, td=0.3)
     K = np.linspace(0.03,1,20) #* 5% to 95% of the number of data points. | shouldn't be linspace(0.05, 0.95, 19) 
@@ -205,13 +274,13 @@ def metric_avg_connection(df) -> float | np.floating:
 
 def generate_score_k_dpt(df, k: float) -> float|np.floating:
     """
-
+    This function generates the score for the k parameter based on the geodesic distance and the average connection.
     Args:
-        df (_type_): _description_
-        k (float): _description_
+        df (np.ndarray): The data array for which to calculate the score.
+        k (float): The k parameter to use for the score calculation.
 
     Returns:
-        float|np.floating: _description_
+        float | np.floating: The score calculated based on the geodesic distance and average connection.
     """
     np.random.seed(SEED)
     if len(df)>200:
@@ -246,10 +315,10 @@ def average_connection(A: np.ndarray)-> np.ndarray:
     This is a helper function to calculate the average connection
     
     Args:
-        A (np.ndarray): is the Adjacency matrix of the graph
+        A (np.ndarray): The adjacency matrix of the graph.
         
     Returns:
-        np.ndarray: the average connection of the graph 
+        np.ndarray: The average connection for each node in the graph.
     """
     SA = ((A+A.T) > 1.5)*1
     old_total = 0
