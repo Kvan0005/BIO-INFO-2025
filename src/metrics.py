@@ -1,4 +1,3 @@
-import warnings
 import anndata
 import scanpy_modified as scanpy
 from ripser import Rips
@@ -12,13 +11,32 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import pairwise_distances
 from sklearn.decomposition import PCA
 from math import floor
-
 from utils2 import normalize, density_downsampling, SEED
 FEATURES_MAX_THRESHOLD = 5 #? 5 is given in the paper dc about logic
-
 scanpy.settings.verbosity = 0
 
-def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool = False) -> np.number:
+
+def get_geodestic_distance(da, neighbours_parameter:dict={}) -> np.ndarray:
+    """
+    Calculate the geodesic distance for the given data
+    
+    Args:
+        df (np.ndarray): The data for which to calculate the geodesic distance.
+        neighbours_parameter (dict): Parameters for the neighbors function.
+    
+    Returns:
+        np.ndarray: The geodesic distance matrix.
+    """
+    # with warnings.catch_warnings():
+    #     warnings.simplefilter("ignore", category=UserWarning)
+    data = anndata.AnnData(da)
+    data.uns['iroot'] = 0
+    scanpy.pp.neighbors(data, **neighbours_parameter)
+    scanpy.tl.diffmap(data)
+    scanpy.tl.dpt(data)
+    return np.stack(data.obs['dpt_distances'].to_list())
+
+def metric_distribution_of_pairwise_distances(da, num_bins: int) -> np.number:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 5
@@ -27,33 +45,22 @@ def metric_distribution_of_pairwise_distances(df, num_bins: int, visualize: bool
     Args:
         da (np.ndarrayy): Data array containing the data to be analyzed.
         num_bins (int): Number of bins to use for the histogram.
-        visualize (bool): If True, displays the histogram plot. Defaults to False.
         
     Returns:
         np.number: The entropy of the histogram of pairwise distances.
     """
-    size_df = len(df)
-    df = anndata.AnnData(df)
-    df.uns['iroot'] = 0
-    
-    scanpy.pp.neighbors(df,n_neighbors=max(10,int(0.005*size_df)), method='umap',knn=True)
-    scanpy.tl.diffmap(df)
-    scanpy.tl.dpt(df)
-    tmp = np.stack(df.obs['dpt_distances'].to_list()) 
+    size_da = len(da)
+    tmp = get_geodestic_distance(da,{"n_neighbors":max(10,int(0.005*size_da)),"knn":True})
     tmp[tmp == np.inf] = 1.5 * np.max(tmp[tmp != np.inf]) 
     tmp[tmp == -np.inf] = -1 * np.min(tmp[tmp != -np.inf]) 
     a = plt.hist(tmp[np.triu(tmp, 1) != 0], bins = num_bins)
     hs = a[0]/np.sum(a[0])
    
     ent = entropy(hs, base=num_bins)
-    if visualize:
-        plt.show()
-    else:
-        plt.close()
     assert type(ent) is np.float64, "pairewise_distance, return value is not a float or number"
     return  ent
 
-def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np.number:
+def metric_persistent_homology(da, num_bins: int) -> np.number:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 6
@@ -67,12 +74,7 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     Returns:
         np.number: The entropy of the histogram of persistent homology distances.
     """   
-    df = anndata.AnnData(df)
-    df.uns['iroot'] = 0
-    scanpy.pp.neighbors(df)
-    scanpy.tl.diffmap(df)
-    scanpy.tl.dpt(df)
-    tmp = np.stack(df.obs['dpt_distances'].to_list()) 
+    tmp = get_geodestic_distance(da)
     # get line with inf values
     tmp[tmp == np.inf] = np.random.normal(1.5, 0.1) * np.max(tmp[tmp != np.inf])
     tmp[tmp == -np.inf] = -1 * np.min(tmp[tmp != -np.inf])
@@ -85,15 +87,14 @@ def metric_persistent_homology(df, num_bins: int, visualize: bool = False) -> np
     normalize_histogram = histogram[0]/np.sum(histogram[0])
     entropy_value = entropy(normalize_histogram, base=num_bins)
     entropy_value = np.log(entropy_value)
-    plt.show() if visualize else plt.close()
     assert type(entropy_value) is np.float64, "entropy_value is not a float or number"
     return entropy_value
 
-def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> float | np.floating:
+def metric_vector(da, cells_per_cluster:int=20, metric: str="euclidean") -> float | np.floating:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
     pg: 6
-    title: Scoring metric 3 – vector magnitude
+    title: Scoring metric 3 - vector magnitude
     
     Args:
         da (np.ndarrayy): Data array containing the data to be analyzed.
@@ -103,14 +104,14 @@ def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> floa
     Returns:
         float | np.floating: The score calculated based on the clustering and vector analysis.
     """
-    if df.shape[1] > FEATURES_MAX_THRESHOLD:
-        df = PCA(n_components=FEATURES_MAX_THRESHOLD).fit_transform(df)
-    number_of_clusters = min(floor(len(df)/cells_per_cluster), 100) #? 5% is given by the formula X/20 => 5% of the data
+    if da.shape[1] > FEATURES_MAX_THRESHOLD:
+        da = PCA(n_components=FEATURES_MAX_THRESHOLD).fit_transform(da)
+    number_of_clusters = min(floor(len(da)/cells_per_cluster), 100) #? 5% is given by the formula X/20 => 5% of the data
     score = 0
     REPETITIONS = 10
     for seed in range(REPETITIONS):
         np.random.seed(seed)
-        kmeans = KMeans(n_clusters=number_of_clusters, random_state=seed).fit(df)
+        kmeans = KMeans(n_clusters=number_of_clusters, random_state=seed).fit(da)
         clusters = kmeans.cluster_centers_
         all_clusters_idx = np.arange(len(clusters))
         all_dist = pairwise_distances(clusters , metric=metric)
@@ -133,7 +134,7 @@ def metric_vector(df, cells_per_cluster:int=20, metric: str="euclidean") -> floa
             vectors = np.array([np.array(kmean_order[i+1]) - np.array(kmean_order[i]) for i in range(len(kmean_order)-1)])
             vectors_sum:np.ndarray = np.sum(vectors, axis=0)
             if not vectors_sum.all() == 0: #if the sum of the vectors is 0 then no need to calculate the norm  
-                norm = np.linalg.norm(vectors_sum,ord=df.shape[1])
+                norm = np.linalg.norm(vectors_sum,ord=da.shape[1])
                 score += norm
             
     return score/(REPETITIONS*number_of_clusters)
@@ -157,30 +158,29 @@ def get_next_index_not_in_kmean_order(dist_current: np.ndarray, pos_kmean_order:
         next_index = sorted_dist[closest_dist_index]
     return next_index
 
-def metric_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  float | np.floating:
+def metric_ripley_dpt(da, threshold: int = 100) ->  float | np.floating:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
-    pg: 6
-    title: Scoring method 4 – Ripley’s k function
+    pg: 7
+    title: Scoring method 4 - Ripley's k function
 
     Args:
         da (np.ndarrayy): Data array containing the data to be analyzed.
         threshold (int, optional): Threshold for the k function. Defaults to 100.
-        visualize (bool, optional): If True, displays the plot. Defaults to False.
 
     Returns:
         float | np.floating: The Ripley score calculated from the k function.
     """
-    n , nb_features = df.shape # "n" is the number of samples in the dataset
-    dim_min = np.min(df, axis=0)
-    dim_max = np.max(df, axis=0)
+    n , nb_features = da.shape # "n" is the number of samples in the dataset
+    dim_min = np.min(da, axis=0)
+    dim_max = np.max(da, axis=0)
     ripley_score = 0
     REPEATITIONS = 1
     for _ in range(REPEATITIONS):
         bootstrap = np.random.uniform(dim_min, dim_max, (n, nb_features))
 
-        geo_dist_df= get_geodestic_distance(df, {})
-        geo_dist_bootstrap = get_geodestic_distance(bootstrap, {})
+        geo_dist_df= get_geodestic_distance(da)
+        geo_dist_bootstrap = get_geodestic_distance(bootstrap)
 
         geo_dist_df = adapt_inf(geo_dist_df)
         geo_dist_bootstrap = adapt_inf(geo_dist_bootstrap)
@@ -196,42 +196,21 @@ def metric_ripley_dpt(df, threshold: int = 100, visualize: bool = False) ->  flo
         ripley_score += local_score
     assert type(ripley_score) is np.float64, "ripley_score is not a float"
     return ripley_score / REPEATITIONS 
-
-def get_geodestic_distance(df, neighbours_parameter:dict) -> np.ndarray:
-    """
-    Calculate the geodesic distance for the given data
-    
-    Args:
-        df (np.ndarray): The data for which to calculate the geodesic distance.
-        neighbours_parameter (dict): Parameters for the neighbors function.
-    
-    Returns:
-        np.ndarray: The geodesic distance matrix.
-    """
-    # with warnings.catch_warnings():
-    #     warnings.simplefilter("ignore", category=UserWarning)
-    data = anndata.AnnData(df)
-    data.uns['iroot'] = 0
-    scanpy.pp.pca(data)
-    scanpy.pp.neighbors(data, **neighbours_parameter, use_rep='X_pca', method='rapids')
-    scanpy.tl.diffmap(data)
-    scanpy.tl.dpt(data)
-    return np.stack(data.obs['dpt_distances'].to_list())
      
-def adapt_inf(df: np.ndarray) -> np.ndarray:
+def adapt_inf(da: np.ndarray) -> np.ndarray:
     """
     Adapt the inf values in the ndarray to the max value time 1.5.
     
     Args:
-        df (np.ndarray): The data array to adapt.
+        da (np.ndarray): The data array to adapt.
         
     Returns:
         np.ndarray: The adapted data array with inf values replaced.
     """
-    df[df == np.inf] = 1.5 * np.max(df[df != np.inf])
-    return df
+    da[da == np.inf] = 1.5 * np.max(da[da != np.inf])
+    return da
 
-def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
+def k_function(da: np.ndarray, threshold_size = 100) -> np.ndarray:
     """
     Calculate the k function for the given data.
     
@@ -242,19 +221,19 @@ def k_function(df: np.ndarray, threshold_size = 100) -> np.ndarray:
     Returns:
         np.ndarray: The k function values for the data.
     """
-    xs = np.linspace(0, np.nanmax(df[df != -np.inf])+1, threshold_size)
+    xs = np.linspace(0, np.nanmax(da[da != -np.inf])+1, threshold_size)
     k_value_ndarray = np.zeros(len(xs))
     for i in range(len(xs)):
         threshold = xs[i]
-        k_value = np.sum(np.sum(df < threshold, axis=0) / df.shape[0]) # the number of samples is still the same as from the original data df/bootstrap (df.shape[0])
+        k_value = np.sum(np.sum(da < threshold, axis=0) / da.shape[0]) # the number of samples is still the same as from the original data df/bootstrap (df.shape[0])
         k_value_ndarray[i] = k_value
     return normalize(k_value_ndarray) #the .values is to convert the dataframe to a numpy array
 
-def metric_avg_connection(df) -> float | np.floating:
+def metric_avg_connection(da) -> float | np.floating:
     """
     ref: https://doi.org/10.1371/journal.pcbi.1011866
-    pg: 6
-    title: Scoring metric 5 – degrees of connectivity
+    pg: 8
+    title: Scoring metric 5 - degrees of connectivity
     
     Args:
         da (np.ndarrayy): Data array containing the data to be analyzed.
@@ -262,7 +241,7 @@ def metric_avg_connection(df) -> float | np.floating:
     Returns:
         float | np.floating: The average connection score calculated from the data.
     """
-    c = density_downsampling(df, od=0.03, td=0.3)
+    c = density_downsampling(da, od=0.03, td=0.3)
     K = np.linspace(0.03,1,20) #* 5% to 95% of the number of data points. | shouldn't be linspace(0.05, 0.95, 19) 
     k_scores = []
     for k in K:
@@ -272,24 +251,24 @@ def metric_avg_connection(df) -> float | np.floating:
     assert type(score) is np.float64, "score is not a float"
     return score
 
-def generate_score_k_dpt(df, k: float) -> float|np.floating:
+def generate_score_k_dpt(da, k: float) -> float|np.floating:
     """
     This function generates the score for the k parameter based on the geodesic distance and the average connection.
     Args:
-        df (np.ndarray): The data array for which to calculate the score.
+        da (np.ndarray): The data array for which to calculate the score.
         k (float): The k parameter to use for the score calculation.
 
     Returns:
         float | np.floating: The score calculated based on the geodesic distance and average connection.
     """
     np.random.seed(SEED)
-    if len(df)>200:
+    if len(da)>200:
         REPETITIONS = 5
         final_score = 0
         for _ in range(REPETITIONS):
-            idx = np.random.randint(0, len(df), size=200)
-            t_data = df[idx]
-            geo_dist_df = get_geodestic_distance(t_data, {})
+            idx = np.random.randint(0, len(da), size=200)
+            t_data = da[idx]
+            geo_dist_df = get_geodestic_distance(t_data)
             geo_dist_df = adapt_inf(geo_dist_df)
             knn_distance_based = NearestNeighbors(n_neighbors=floor(len(t_data)*k), metric="precomputed").fit(geo_dist_df)
             
@@ -300,10 +279,10 @@ def generate_score_k_dpt(df, k: float) -> float|np.floating:
             final_score += np.median(avg_connect)
         return final_score / REPETITIONS
     else:
-        geo_dist_df = get_geodestic_distance(df, {})
+        geo_dist_df = get_geodestic_distance(da)
         geo_dist_df = adapt_inf(geo_dist_df)
         
-        knn_distance_based: NearestNeighbors = NearestNeighbors(n_neighbors=max(1, floor(len(df)*k)), metric="precomputed").fit(geo_dist_df)
+        knn_distance_based: NearestNeighbors = NearestNeighbors(n_neighbors=max(1, floor(len(da)*k)), metric="precomputed").fit(geo_dist_df)
         
         Adjacency = knn_distance_based.kneighbors_graph(geo_dist_df).toarray() #type: ignore
         avg_connect = average_connection(Adjacency)
@@ -329,19 +308,3 @@ def average_connection(A: np.ndarray)-> np.ndarray:
         SA = ((SA @ SA) > 1)*1
         total = np.sum(SA)
     return np.mean(SA, axis=0) 
-
-
-if __name__ == "__main__":
-    # Example usage
-    from utils2 import preprocessing
-    # path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/"
-    # for file in os.listdir(path):
-    #     if file.endswith(".rds.csv"):
-    #         print(file)
-    #         df = pd.read_csv(path + file, index_col=0)
-    #         df = preprocessing(df, 0.1, 0.9)
-    #         metric_persistent_homology(df, num_bins=10)
-    path = "/home/linsfa/Documents/BIO-INFO-2025/src/data/fig6_fig7/bone-marrow-mesenchyme-erythrocyte-differentiation_mca.rds.csv"
-    df = pd.read_csv(path, index_col=0)
-    # df = preprocessing(df, 0.1, 0.9)
-    print(metric_avg_connection(df))

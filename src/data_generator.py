@@ -1,7 +1,5 @@
 import numpy as np
 import random
-from matplotlib.image import BboxImage
-from matplotlib.transforms import Bbox, TransformedBbox
 import sklearn
 import sklearn.metrics
 from enum import Enum

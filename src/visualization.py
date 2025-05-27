@@ -1,8 +1,4 @@
-import umap
-import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
 from metrics import metric_distribution_of_pairwise_distances, metric_persistent_homology, metric_vector, metric_ripley_dpt, metric_avg_connection 
 from utils2 import preprocessing
 
@@ -27,61 +23,6 @@ def calculate_metrics(df: np.ndarray) -> list[np.floating | float | np.number]:
     sc5 = metric_avg_connection(df)
     return [sc1,sc2,sc3,sc4,sc5]
     
-    
-def explain_score(sc_traj_clstr_score):
-    META_SCORES = list(np.load('data/simulated_metascores_12000.npy')) # Loading pre-computed scores for simulated datasets
-
-    clstr = META_SCORES[:3000]
-    traj = META_SCORES[3000:6000]
-    clstr_r1 = META_SCORES[6000:9000]
-    traj_r1 = META_SCORES[9000:]
-   
-
-    npy_sim = np.array(META_SCORES)
-    feature_names = ['P-dist','Homology','Vector','Ripleys','Deg. of Sep.']
-
-    metric = 'euclidean'
-    seed = 1
-    n_neighbors = 50
-    min_dist = 0.6
-    figsize = 5
-
-    scaler = StandardScaler()
-    tmp_np = scaler.fit_transform(npy_sim)
-    tmp_reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=2,random_state=seed,min_dist=min_dist, metric=metric)
-    embedding = tmp_reducer.fit_transform(tmp_np)
-    c = [0]*3000 + [1]*3000 + [0]*3000 + [1]*3000
-
-    neigh = KNeighborsClassifier(n_neighbors=100)
-    neigh.fit(embedding, c) #type: ignore
-
-    p = neigh.predict_proba(embedding)[:,1] #type: ignore
-
-    ####################
-    ####################
-    INPUT_SCALED = scaler.transform(np.array(sc_traj_clstr_score).reshape(1, -1))
-    UMAP_PROJECTION = tmp_reducer.transform(INPUT_SCALED.reshape(1, -1))    
-    ####################
-    ####################
-
-    plt.figure(figsize=(figsize,figsize))
-    plt.scatter(embedding[:,0],embedding[:,1], c = p, alpha = 1) #type: ignore
-    plt.scatter(UMAP_PROJECTION[0][0],UMAP_PROJECTION[0][1],color='red',marker='^') #type: ignore
-    plt.show()
-
-    for i in range(len(feature_names)):
-        feat = i
-        plt.figure(figsize=(5,3))
-        plt.violinplot([np.array(clstr)[:,feat],
-                        np.array(clstr_r1)[:,feat],
-                        np.array(traj_r1)[:,feat],
-                        np.array(traj)[:,feat]],
-                      showmeans = True, showextrema=False)
-        plt.axhline(sc_traj_clstr_score[i],c='red',ls='--')
-        plt.title(feature_names[i], fontsize = 20)
-        plt.xticks(fontsize=15, rotation=315)
-        plt.xticks([1, 2, 3, 4], ['Clear Clusters','Noisy Clusters','Noise Trajectory','Clear Trajectory'])
-        plt.show()
     
 
 if __name__ == '__main__':
