@@ -177,9 +177,8 @@ cython_debug/
 src/data/*
 !src/data/README.md
 !src/data/our_meta_scores.npy
-!src/data/our_meta_scores_6000.npy
-!src/data/our_meta_scores_4000.npy
 !src/data/real_score_scores.npy
+!src/data/brain/*.csv
 #scatterplot
 src/scatterplots/*
 
