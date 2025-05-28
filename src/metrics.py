@@ -1,7 +1,6 @@
 import anndata
 import scanpy_modified as scanpy
 from ripser import Rips
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import sparse
@@ -12,7 +11,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.decomposition import PCA
 from math import floor
 from utils2 import normalize, density_downsampling, SEED
-FEATURES_MAX_THRESHOLD = 5 #? 5 is given in the paper dc about logic
+FEATURES_MAX_THRESHOLD = 5 #? 5 is given in the paper
 scanpy.settings.verbosity = 0
 
 
