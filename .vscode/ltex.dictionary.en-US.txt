@@ -1,4 +1,0 @@
-ipynb
-readme
-clusterness
-trajectoryness
